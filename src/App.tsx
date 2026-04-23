@@ -160,6 +160,12 @@ export default function App() {
   const [latestHits, setLatestHits] = useState<Hit[]>([]);
   const [taskState, setTaskState] = useState<Record<string, unknown>>({});
   const messageEndRef = useRef<HTMLDivElement | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
   const transport = useMemo(
     () =>
       new TextStreamChatTransport({
@@ -168,12 +174,13 @@ export default function App() {
           body: {
             ...body,
             messages,
-            session_id: sessionId,
+            session_id:
+              typeof body?.session_id === "string" ? body.session_id : sessionIdRef.current,
             k: 4,
           },
         }),
       }),
-    [sessionId],
+    [],
   );
 
   const {
@@ -186,17 +193,18 @@ export default function App() {
   } = useChat({
     transport,
     onFinish: () => {
-      if (!sessionId) {
+      const activeSessionId = sessionIdRef.current;
+      if (!activeSessionId) {
         return;
       }
       void (async () => {
         try {
-          const data = await sessionsApi.get(sessionId);
+          const data = await sessionsApi.get(activeSessionId);
           setMessages(mapHistoryToMessages(data.history));
           setLatestSummary(data.latest_summary ?? null);
           setLatestHits(data.latest_hits ?? []);
           setTaskState(data.task_state ?? {});
-          await loadSessions(sessionId);
+          await loadSessions(activeSessionId);
         } catch (loadError) {
           setError(getErrorMessage(loadError));
         }
