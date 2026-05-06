@@ -1,7 +1,17 @@
 import { useState, type FormEvent } from "react"
+import { GithubIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { loginUser, registerUser, type AuthUser } from "@/lib/auth"
+import {
+  loginUser,
+  loginWithEmailOtp,
+  loginWithSocialProvider,
+  registerUser,
+  sendLoginEmailOtp,
+  verifyEmailWithOtp,
+  type AuthUser,
+  type SocialProvider,
+} from "@/lib/auth"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -37,8 +47,15 @@ export function LoginForm({
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [socialProvider, setSocialProvider] = useState<SocialProvider | null>(null)
+  const [otp, setOtp] = useState("")
+  const [isSendingOtp, setIsSendingOtp] = useState(false)
+  const [isOtpSubmitting, setIsOtpSubmitting] = useState(false)
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null)
 
   const isRegister = mode === "register"
+  const isVerifyingRegistration = isRegister && Boolean(pendingVerificationEmail)
+  const isBusy = isSubmitting || isSendingOtp || isOtpSubmitting || Boolean(socialProvider)
 
   function resetMessages() {
     setError(null)
@@ -49,6 +66,8 @@ export function LoginForm({
     setMode(nextMode)
     setPassword("")
     setConfirmPassword("")
+    setOtp("")
+    setPendingVerificationEmail(null)
     resetMessages()
   }
 
@@ -63,9 +82,16 @@ export function LoginForm({
           throw new Error("两次输入的密码不一致")
         }
 
-        const user = await registerUser({ name, email, password })
+        const result = await registerUser({ name, email, password })
+        if (result.requiresEmailVerification) {
+          setPendingVerificationEmail(result.user.email)
+          setOtp("")
+          setSuccessMessage("注册成功，验证码已发送，请验证邮箱")
+          return
+        }
+
         setSuccessMessage("注册成功，已自动登录")
-        onSuccess?.(user)
+        onSuccess?.(result.user)
         return
       }
 
@@ -79,15 +105,74 @@ export function LoginForm({
     }
   }
 
+  async function handleSocialLogin(provider: SocialProvider) {
+    resetMessages()
+    setSocialProvider(provider)
+
+    try {
+      await loginWithSocialProvider(provider)
+    } catch (socialError) {
+      setError(socialError instanceof Error ? socialError.message : "第三方登录失败")
+      setSocialProvider(null)
+    }
+  }
+
+  async function handleSendOtp() {
+    resetMessages()
+    setIsSendingOtp(true)
+
+    try {
+      setOtp("")
+      await sendLoginEmailOtp({ email })
+      setSuccessMessage("验证码已发送，请查收邮箱")
+    } catch (otpError) {
+      setError(otpError instanceof Error ? otpError.message : "验证码发送失败")
+    } finally {
+      setIsSendingOtp(false)
+    }
+  }
+
+  async function handleOtpLogin() {
+    resetMessages()
+    setIsOtpSubmitting(true)
+
+    try {
+      const user = await loginWithEmailOtp({ email, otp })
+      setSuccessMessage("登录成功")
+      onSuccess?.(user)
+    } catch (otpError) {
+      setError(otpError instanceof Error ? otpError.message : "验证码登录失败")
+    } finally {
+      setIsOtpSubmitting(false)
+    }
+  }
+
+  async function handleVerifyRegistration() {
+    resetMessages()
+    setIsOtpSubmitting(true)
+
+    try {
+      const user = await verifyEmailWithOtp({ email: pendingVerificationEmail ?? email, otp })
+      setSuccessMessage("邮箱验证成功")
+      onSuccess?.(user)
+    } catch (otpError) {
+      setError(otpError instanceof Error ? otpError.message : "邮箱验证失败")
+    } finally {
+      setIsOtpSubmitting(false)
+    }
+  }
+
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
         <CardHeader className="text-center">
           <CardTitle className="text-xl">
-            {isRegister ? "Create an account" : "Welcome back"}
+            {isRegister ? "创建账号" : "欢迎回来"}
           </CardTitle>
           <CardDescription>
-            {isRegister
+            {isVerifyingRegistration
+              ? "输入邮箱验证码完成注册"
+              : isRegister
               ? "使用邮箱创建账号"
               : "使用邮箱和密码登录"}
           </CardDescription>
@@ -96,49 +181,86 @@ export function LoginForm({
           <form onSubmit={handleSubmit}>
             <FieldGroup>
               <Field>
-                <Button variant="outline" type="button" disabled>
-                  Login with Apple
-                </Button>
-                <Button variant="outline" type="button" disabled>
-                  Login with Google
+                <Button
+                  variant="outline"
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => void handleSocialLogin("github")}
+                >
+                  <GithubIcon />
+                  {socialProvider === "github" ? "正在跳转 GitHub..." : "使用 GitHub 登录"}
                 </Button>
               </Field>
               <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
-                {isRegister ? "Create with email" : "Or continue with"}
+                {isRegister ? "使用邮箱创建" : "或使用邮箱继续"}
               </FieldSeparator>
               {isRegister ? (
                 <Field>
-                  <FieldLabel htmlFor="name">Name</FieldLabel>
+                  <FieldLabel htmlFor="name">姓名</FieldLabel>
                   <Input
                     id="name"
                     value={name}
                     onChange={(event) => setName(event.target.value)}
-                    placeholder="your name"
+                    placeholder="请输入姓名"
                     required
                   />
                 </Field>
               ) : null}
               <Field>
-                <FieldLabel htmlFor="email">Email</FieldLabel>
+                <FieldLabel htmlFor="email">邮箱</FieldLabel>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="m@example.com"
+                  placeholder="name@example.com"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   required
                 />
               </Field>
+              {!isRegister ? (
+                <Field>
+                  <FieldLabel htmlFor="email-otp">邮箱验证码</FieldLabel>
+                  <div className="flex gap-2">
+                    <Input
+                      id="email-otp"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      placeholder="请输入验证码"
+                      value={otp}
+                      onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    />
+                    <Button
+                      variant="outline"
+                      type="button"
+                      className="shrink-0"
+                      disabled={isBusy}
+                      onClick={() => void handleSendOtp()}
+                    >
+                      {isSendingOtp ? "发送中..." : "发送验证码"}
+                    </Button>
+                  </div>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => void handleOtpLogin()}
+                  >
+                    {isOtpSubmitting ? "登录中..." : "验证码登录"}
+                  </Button>
+                </Field>
+              ) : null}
               <Field>
                 <div className="flex items-center">
-                  <FieldLabel htmlFor="password">Password</FieldLabel>
+                  <FieldLabel htmlFor="password">密码</FieldLabel>
                   {!isRegister ? (
                     <button
                       type="button"
                       className="ml-auto text-sm text-muted-foreground underline-offset-4 hover:underline"
+                      disabled={isBusy}
                       onClick={() => setSuccessMessage("请联系管理员重置密码")}
                     >
-                      Forgot your password?
+                      忘记密码？
                     </button>
                   ) : null}
                 </div>
@@ -152,7 +274,7 @@ export function LoginForm({
               </Field>
               {isRegister ? (
                 <Field>
-                  <FieldLabel htmlFor="confirm-password">Confirm password</FieldLabel>
+                  <FieldLabel htmlFor="confirm-password">确认密码</FieldLabel>
                   <Input
                     id="confirm-password"
                     type="password"
@@ -162,6 +284,29 @@ export function LoginForm({
                   />
                 </Field>
               ) : null}
+              {isVerifyingRegistration ? (
+                <Field>
+                  <FieldLabel htmlFor="register-email-otp">邮箱验证码</FieldLabel>
+                  <Input
+                    id="register-email-otp"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    placeholder="请输入验证码"
+                    value={otp}
+                    onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    required
+                  />
+                  <Button
+                    variant="outline"
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => void handleVerifyRegistration()}
+                  >
+                    {isOtpSubmitting ? "验证中..." : "验证邮箱"}
+                  </Button>
+                </Field>
+              ) : null}
               {error ? <FieldError>{error}</FieldError> : null}
               {successMessage ? (
                 <FieldDescription className="text-center text-emerald-600">
@@ -169,18 +314,18 @@ export function LoginForm({
                 </FieldDescription>
               ) : null}
               <Field>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? "处理中..." : isRegister ? "Sign up" : "Login"}
+                <Button type="submit" disabled={isBusy || isVerifyingRegistration}>
+                  {isSubmitting ? "处理中..." : isRegister ? "注册" : "登录"}
                 </Button>
                 <FieldDescription className="text-center">
-                  {isRegister ? "Already have an account? " : "Don't have an account? "}
+                  {isRegister ? "已有账号？" : "还没有账号？"}
                   <button
                     type="button"
                     className="underline underline-offset-4 hover:text-primary"
-                    disabled={isSubmitting}
+                    disabled={isBusy}
                     onClick={() => switchMode(isRegister ? "login" : "register")}
                   >
-                    {isRegister ? "Login" : "Sign up"}
+                    {isRegister ? "去登录" : "去注册"}
                   </button>
                 </FieldDescription>
               </Field>
@@ -188,9 +333,6 @@ export function LoginForm({
           </form>
         </CardContent>
       </Card>
-      <FieldDescription className="px-6 text-center">
-        登录与注册请求会发送到 /api/auth。
-      </FieldDescription>
     </div>
   )
 }

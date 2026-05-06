@@ -10,6 +10,7 @@ export interface paths {
   }
   "/sessions/{session_id}": {
     get: operations["getSession"]
+    delete: operations["deleteSession"]
   }
   "/ask": {
     post: operations["ask"]
@@ -46,6 +47,10 @@ export interface components {
     CreateSessionPayload: {
       history?: components["schemas"]["HistoryMessage"][]
       task_state?: Record<string, unknown>
+    }
+    SessionDeleteResponse: {
+      session_id: string
+      deleted: boolean
     }
     AskRequest: {
       messages: unknown[]
@@ -115,6 +120,30 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["SessionDetail"]
+        }
+      }
+      404: {
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"]
+        }
+      }
+      default: {
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"]
+        }
+      }
+    }
+  }
+  deleteSession: {
+    parameters: {
+      path: {
+        session_id: string
+      }
+    }
+    responses: {
+      200: {
+        content: {
+          "application/json": components["schemas"]["SessionDeleteResponse"]
         }
       }
       404: {

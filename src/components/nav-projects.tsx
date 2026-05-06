@@ -30,6 +30,7 @@ export function NavProjects({
     name: string
     icon: React.ReactNode
     onSelect?: () => void
+    onDelete?: () => void
   }[]
   emptyMessage?: string
   activeProjectId?: string | null
@@ -78,16 +79,23 @@ export function NavProjects({
               >
                 <DropdownMenuItem>
                   <FolderIcon className="text-muted-foreground" />
-                  <span>View {label.slice(0, -1) || label}</span>
+                  <span>View</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem>
                   <ArrowRightIcon className="text-muted-foreground" />
-                  <span>Share {label.slice(0, -1) || label}</span>
+                  <span>Share </span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!item.onDelete}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    item.onDelete?.()
+                  }}
+                  variant="destructive"
+                >
                   <Trash2Icon className="text-muted-foreground" />
-                  <span>Delete {label.slice(0, -1) || label}</span>
+                  <span>Delete </span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

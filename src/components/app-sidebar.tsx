@@ -14,44 +14,36 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { type SessionSummary } from "@/lib/api"
-import { AudioLinesIcon, TerminalIcon, TerminalSquareIcon, BotIcon, BookOpenIcon, Settings2Icon, MessageSquareIcon, Loader2Icon } from "lucide-react"
+import { AudioLinesIcon, TerminalIcon, TerminalSquareIcon, BotIcon, BookOpenIcon, Settings2Icon, MessageSquareIcon, Loader2Icon, MessageSquarePlusIcon } from "lucide-react"
 
 // This is sample data.
 const data = {
   user: {
-    name: "shadcn",
-    email: "m@example.com",
+    name: "请登录",
+    email: "",
     avatar: "",
   },
   teams: [
-    // {
-    //   name: "Acme Inc",
-    //   logo: (
-    //     <GalleryVerticalEndIcon
-    //     />
-    //   ),
-    //   plan: "Enterprise",
-    // },
     {
-      name: "Acme Corp.",
+      name: "知识库助手",
       logo: (
         <AudioLinesIcon
         />
       ),
-      plan: "Startup",
+      plan: "标准版",
     },
     {
-      name: "Evil Corp.",
+      name: "研发工作台",
       logo: (
         <TerminalIcon
         />
       ),
-      plan: "Free",
+      plan: "免费版",
     },
   ],
   navMain: [
     {
-      title: "Playground",
+      title: "对话工作台",
       url: "#",
       icon: (
         <TerminalSquareIcon
@@ -60,21 +52,21 @@ const data = {
       isActive: true,
       items: [
         {
-          title: "History",
+          title: "历史记录",
           url: "#",
         },
         {
-          title: "Starred",
+          title: "收藏会话",
           url: "#",
         },
         {
-          title: "Settings",
+          title: "对话设置",
           url: "#",
         },
       ],
     },
     {
-      title: "Models",
+      title: "模型",
       url: "#",
       icon: (
         <BotIcon
@@ -82,21 +74,21 @@ const data = {
       ),
       items: [
         {
-          title: "Genesis",
+          title: "通用模型",
           url: "#",
         },
         {
-          title: "Explorer",
+          title: "探索模型",
           url: "#",
         },
         {
-          title: "Quantum",
+          title: "推理模型",
           url: "#",
         },
       ],
     },
     {
-      title: "Documentation",
+      title: "文档",
       url: "#",
       icon: (
         <BookOpenIcon
@@ -104,25 +96,25 @@ const data = {
       ),
       items: [
         {
-          title: "Introduction",
+          title: "产品介绍",
           url: "#",
         },
         {
-          title: "Get Started",
+          title: "快速开始",
           url: "#",
         },
         {
-          title: "Tutorials",
+          title: "使用教程",
           url: "#",
         },
         {
-          title: "Changelog",
+          title: "更新日志",
           url: "#",
         },
       ],
     },
     {
-      title: "Settings",
+      title: "设置",
       url: "#",
       icon: (
         <Settings2Icon
@@ -130,19 +122,19 @@ const data = {
       ),
       items: [
         {
-          title: "General",
+          title: "通用设置",
           url: "#",
         },
         {
-          title: "Team",
+          title: "团队管理",
           url: "#",
         },
         {
-          title: "Billing",
+          title: "账单",
           url: "#",
         },
         {
-          title: "Limits",
+          title: "额度限制",
           url: "#",
         },
       ],
@@ -156,7 +148,10 @@ export function AppSidebar({
   hasError = false,
   activeSessionId = null,
   onSelectSession,
+  onDeleteSession,
+  onNewChat,
   user,
+  onLogin,
   onLogout,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
@@ -165,11 +160,14 @@ export function AppSidebar({
   hasError?: boolean
   activeSessionId?: string | null
   onSelectSession?: (sessionId: string) => void
+  onDeleteSession?: (sessionId: string) => void
+  onNewChat?: () => void
   user?: {
     name: string
     email: string
     avatar?: string | null
   }
+  onLogin?: () => void
   onLogout?: () => void
 }) {
   const sessionItems = React.useMemo(
@@ -181,8 +179,22 @@ export function AppSidebar({
           `Session ${session.session_id.slice(0, 8)}`,
         icon: <MessageSquareIcon />,
         onSelect: () => onSelectSession?.(session.session_id),
+        onDelete: () => onDeleteSession?.(session.session_id),
       })),
-    [onSelectSession, sessions]
+    [onDeleteSession, onSelectSession, sessions]
+  )
+
+  const navMainItems = React.useMemo(
+    () => [
+      {
+        title: "新聊天",
+        url: "#",
+        icon: <MessageSquarePlusIcon />,
+        onClick: onNewChat,
+      },
+      ...data.navMain,
+    ],
+    [onNewChat]
   )
 
   const sessionProjects = isLoading
@@ -194,6 +206,7 @@ export function AppSidebar({
         },
       ]
     : sessionItems
+  const sidebarUser = user ?? data.user
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -201,7 +214,7 @@ export function AppSidebar({
         <TeamSwitcher teams={data.teams} />
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavMain items={navMainItems} />
         <NavProjects
           label="历史对话"
           projects={sessionProjects}
@@ -210,7 +223,12 @@ export function AppSidebar({
         />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={user ?? data.user} onLogout={onLogout} />
+        <NavUser
+          user={sidebarUser}
+          isLoggedIn={Boolean(user)}
+          onLogin={onLogin}
+          onLogout={onLogout}
+        />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

@@ -16,6 +16,7 @@ export type Hit = components["schemas"]["Hit"]
 export type SessionSummary = components["schemas"]["SessionSummary"]
 export type SessionDetail = components["schemas"]["SessionDetail"]
 export type CreateSessionPayload = components["schemas"]["CreateSessionPayload"]
+export type SessionDeleteResponse = components["schemas"]["SessionDeleteResponse"]
 
 export const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? ""
@@ -107,9 +108,18 @@ export const useImmutable = createImmutableHook(client, prefix)
 export const useInfinite = createInfiniteHook(client, prefix)
 export const useMutate = createMutateHook(client, prefix, isMatch)
 
+async function withAuthRetry<T>(request: () => Promise<{ data?: T; error?: unknown; response: Response }>) {
+  let result = await request()
+  if (result.error && result.response.status === 401) {
+    await getJwtToken({ forceRefresh: true })
+    result = await request()
+  }
+  return result
+}
+
 export const sessionsApi = {
   async list() {
-    const { data, error, response } = await client.GET("/sessions")
+    const { data, error, response } = await withAuthRetry(() => client.GET("/sessions"))
     if (error) {
       throw new ApiError(error, response.status)
     }
@@ -120,25 +130,54 @@ export const sessionsApi = {
   },
 
   async get(sessionId: string) {
-    const { data, error, response } = await client.GET("/sessions/{session_id}", {
-      params: {
-        path: {
-          session_id: sessionId,
+    const { data, error, response } = await withAuthRetry(() =>
+      client.GET("/sessions/{session_id}", {
+        params: {
+          path: {
+            session_id: sessionId,
+          },
         },
-      },
-    })
+      }),
+    )
     if (error) {
       throw new ApiError(error, response.status)
+    }
+    if (!data) {
+      throw new Error("会话详情接口返回格式错误")
     }
     return data
   },
 
   async create(payload: CreateSessionPayload) {
-    const { data, error, response } = await client.POST("/sessions", {
-      body: payload,
-    })
+    const { data, error, response } = await withAuthRetry(() =>
+      client.POST("/sessions", {
+        body: payload,
+      }),
+    )
     if (error) {
       throw new ApiError(error, response.status)
+    }
+    if (!data) {
+      throw new Error("创建会话接口返回格式错误")
+    }
+    return data
+  },
+
+  async delete(sessionId: string) {
+    const { data, error, response } = await withAuthRetry(() =>
+      client.DELETE("/sessions/{session_id}", {
+        params: {
+          path: {
+            session_id: sessionId,
+          },
+        },
+      }),
+    )
+    if (error) {
+      throw new ApiError(error, response.status)
+    }
+    if (!data) {
+      throw new Error("删除会话接口返回格式错误")
     }
     return data
   },

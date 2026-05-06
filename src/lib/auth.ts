@@ -7,6 +7,8 @@ export type AuthUser = {
   image?: string | null
 }
 
+export type SocialProvider = "github"
+
 type AuthResponse<T = unknown> = {
   data: T | null
   error: {
@@ -29,10 +31,15 @@ type SignInData = SessionData & {
   token?: string | null
 }
 
+type RegisterResult = {
+  user: AuthUser
+  requiresEmailVerification: boolean
+}
+
 const AUTH_CURRENT_USER_KEY = "rag-web-auth-current-user"
 const ACCESS_TOKEN_KEY = "access_token"
 const ACCESS_TOKEN_COOKIE = "rag_access_token"
-const ACCESS_TOKEN_MAX_AGE = 60 * 60 * 24 * 7
+const ACCESS_TOKEN_MAX_AGE = 60 * 60 * 24 * 30
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -131,6 +138,7 @@ export async function getJwtToken(options?: { forceRefresh?: boolean }) {
   if (!response.ok) {
     if (options?.forceRefresh) {
       clearAccessToken()
+      return null
     }
     return cachedToken
   }
@@ -144,17 +152,12 @@ export async function getJwtToken(options?: { forceRefresh?: boolean }) {
   return cachedToken
 }
 
-export async function getAuthHeaders(): Promise<Record<string, string>> {
-  const token = await getJwtToken()
+export async function getAuthHeaders(options?: { forceRefresh?: boolean }): Promise<Record<string, string>> {
+  const token = await getJwtToken(options)
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-async function syncAccessToken(data?: SignInData | null) {
-  if (data?.token) {
-    storeAccessToken(data.token)
-    return
-  }
-
+async function syncAccessToken() {
   await getJwtToken({ forceRefresh: true })
 }
 
@@ -186,7 +189,7 @@ export async function registerUser(input: {
   name: string
   email: string
   password: string
-}) {
+}): Promise<RegisterResult> {
   const name = input.name.trim()
   const email = input.email.trim().toLowerCase()
   const password = input.password
@@ -201,24 +204,37 @@ export async function registerUser(input: {
     throw new Error("密码至少需要 6 位")
   }
 
-  const response = (await authClient.signUp.email({
+  const signUpPayload = {
     name,
     email,
     password,
-  })) as AuthResponse<SignInData>
+    rememberMe: true,
+  }
+
+  const response = (await authClient.signUp.email(signUpPayload)) as AuthResponse<SignInData>
 
   if (response.error) {
     throw new Error(getAuthErrorMessage(response.error))
   }
 
-  const user = normalizeUser(response.data?.user) ?? (await refreshCurrentUser())
+  const user = normalizeUser(response.data?.user)
   if (!user) {
     throw new Error("注册成功，但无法获取用户信息")
   }
 
+  if (!response.data?.token) {
+    return {
+      user,
+      requiresEmailVerification: true,
+    }
+  }
+
   storeCurrentUser(user)
-  await syncAccessToken(response.data)
-  return user
+  await syncAccessToken()
+  return {
+    user,
+    requiresEmailVerification: false,
+  }
 }
 
 export async function loginUser(input: { email: string; password: string }) {
@@ -235,6 +251,7 @@ export async function loginUser(input: { email: string; password: string }) {
   const response = (await authClient.signIn.email({
     email,
     password,
+    rememberMe: true,
   })) as AuthResponse<SignInData>
 
   if (response.error) {
@@ -247,6 +264,102 @@ export async function loginUser(input: { email: string; password: string }) {
   }
 
   storeCurrentUser(user)
-  await syncAccessToken(response.data)
+  await syncAccessToken()
   return user
+}
+
+export async function sendLoginEmailOtp(input: { email: string }) {
+  const email = input.email.trim().toLowerCase()
+
+  if (!email) {
+    throw new Error("请输入邮箱")
+  }
+
+  const response = (await authClient.emailOtp.sendVerificationOtp({
+    email,
+    type: "sign-in",
+  })) as AuthResponse
+
+  if (response.error) {
+    throw new Error(getAuthErrorMessage(response.error))
+  }
+}
+
+export async function loginWithEmailOtp(input: { email: string; otp: string }) {
+  const email = input.email.trim().toLowerCase()
+  const otp = input.otp.trim()
+
+  if (!email) {
+    throw new Error("请输入邮箱")
+  }
+  if (!otp) {
+    throw new Error("请输入验证码")
+  }
+  if (!/^\d{6}$/.test(otp)) {
+    throw new Error("请输入 6 位数字验证码")
+  }
+
+  const response = (await authClient.signIn.emailOtp({
+    email,
+    otp,
+    name: email.split("@")[0] || email,
+  })) as AuthResponse<SignInData>
+
+  if (response.error) {
+    throw new Error(getAuthErrorMessage(response.error))
+  }
+
+  const user = normalizeUser(response.data?.user) ?? (await refreshCurrentUser())
+  if (!user) {
+    throw new Error("登录成功，但无法获取用户信息")
+  }
+
+  storeCurrentUser(user)
+  await syncAccessToken()
+  return user
+}
+
+export async function verifyEmailWithOtp(input: { email: string; otp: string }) {
+  const email = input.email.trim().toLowerCase()
+  const otp = input.otp.trim()
+
+  if (!email) {
+    throw new Error("请输入邮箱")
+  }
+  if (!otp) {
+    throw new Error("请输入验证码")
+  }
+  if (!/^\d{6}$/.test(otp)) {
+    throw new Error("请输入 6 位数字验证码")
+  }
+
+  const response = (await authClient.emailOtp.verifyEmail({
+    email,
+    otp,
+  })) as AuthResponse<SignInData & { status?: boolean }>
+
+  if (response.error) {
+    throw new Error(getAuthErrorMessage(response.error))
+  }
+
+  const user = normalizeUser(response.data?.user) ?? (await refreshCurrentUser())
+  if (!user) {
+    throw new Error("邮箱验证成功，但无法获取用户信息")
+  }
+
+  storeCurrentUser(user)
+  await syncAccessToken()
+  return user
+}
+
+export async function loginWithSocialProvider(provider: SocialProvider) {
+  const response = (await authClient.signIn.social({
+    provider,
+    callbackURL: window.location.origin,
+    errorCallbackURL: `${window.location.origin}/login`,
+  })) as AuthResponse
+
+  if (response?.error) {
+    throw new Error(getAuthErrorMessage(response.error))
+  }
 }

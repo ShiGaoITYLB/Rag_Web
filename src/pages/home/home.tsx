@@ -156,6 +156,11 @@ export default function HomePage() {
         prepareSendMessagesRequest: async ({ body, messages, headers }) => {
           const requestHeaders = new Headers(headers)
           const authHeaders = await getAuthHeaders()
+          const requestBody = body && typeof body === "object" ? (body as Record<string, unknown>) : {}
+          const requestSessionId =
+            typeof requestBody.session_id === "string" && requestBody.session_id.trim()
+              ? requestBody.session_id
+              : sessionId
 
           Object.entries(authHeaders).forEach(([key, value]) => {
             requestHeaders.set(key, value)
@@ -164,9 +169,9 @@ export default function HomePage() {
           return {
             headers: requestHeaders,
             body: {
-              ...body,
+              ...requestBody,
               messages,
-              session_id: sessionId,
+              session_id: requestSessionId,
               k: 4,
             },
           }
@@ -218,7 +223,7 @@ export default function HomePage() {
       const data = await sessionsApi.list()
       setSessions(data)
 
-      const nextSessionId = preferredSessionId ?? sessionId
+      const nextSessionId = preferredSessionId === undefined ? sessionId : preferredSessionId
       if (nextSessionId && !data.some((item) => item.session_id === nextSessionId)) {
         setSessionId(null)
         setMessages([])
@@ -272,6 +277,54 @@ export default function HomePage() {
       await loadSessionDetail(targetSessionId)
     } catch (loadError) {
       setError(getErrorMessage(loadError))
+    }
+  }
+
+  async function handleDeleteSession(targetSessionId: string) {
+    if (isSending) {
+      return
+    }
+
+    setError(null)
+    clearError()
+    try {
+      await sessionsApi.delete(targetSessionId)
+      setSessions((current) => current.filter((item) => item.session_id !== targetSessionId))
+
+      if (targetSessionId === sessionId) {
+        setSessionId(null)
+        setMessages([])
+        setLatestSummary(null)
+        setLatestHits([])
+        setTaskState({})
+        window.localStorage.removeItem(STORAGE_KEY)
+        if (window.location.hash) {
+          window.history.replaceState(null, "", window.location.pathname)
+        }
+      }
+
+      await loadSessions(targetSessionId === sessionId ? null : sessionId)
+    } catch (deleteError) {
+      setError(getErrorMessage(deleteError))
+    }
+  }
+
+  function handleNewChat() {
+    if (isSending) {
+      return
+    }
+
+    setSessionId(null)
+    setInput("")
+    setMessages([])
+    setLatestSummary(null)
+    setLatestHits([])
+    setTaskState({})
+    setError(null)
+    clearError()
+    window.localStorage.removeItem(STORAGE_KEY)
+    if (window.location.hash) {
+      window.history.replaceState(null, "", window.location.pathname)
     }
   }
 
@@ -390,6 +443,10 @@ export default function HomePage() {
     navigate("/login", { replace: true })
   }
 
+  function handleLogin() {
+    navigate("/login")
+  }
+
   return (
     <SidebarProvider>
       <AppSidebar
@@ -406,18 +463,21 @@ export default function HomePage() {
               }
             : undefined
         }
+        onLogin={handleLogin}
         onLogout={handleLogout}
         onSelectSession={(targetSessionId) => {
           void handleSelectSession(targetSessionId)
         }}
+        onDeleteSession={(targetSessionId) => {
+          void handleDeleteSession(targetSessionId)
+        }}
+        onNewChat={handleNewChat}
       />
-      <SidebarInset className="min-h-screen bg-[linear-gradient(180deg,#f6f5f2_0%,#fbfbf8_100%)] text-foreground">
+      <SidebarInset className="h-screen overflow-hidden bg-[linear-gradient(180deg,#f6f5f2_0%,#fbfbf8_100%)] text-foreground">
         <header className="flex items-center justify-between px-5 py-4 lg:px-8">
           <div className="flex items-center gap-3">
             <SidebarTrigger className="h-9 w-9" />
-            <Button variant="ghost" className="h-auto px-0 text-xl font-semibold tracking-tight hover:bg-transparent">
-              ChatGPT
-            </Button>
+
           </div>
           <Button
             type="button"
@@ -568,7 +628,7 @@ export default function HomePage() {
               </section>
             </div>
 
-            <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 bg-[linear-gradient(180deg,rgba(251,251,248,0),rgba(251,251,248,0.92)_18%,rgba(251,251,248,1)_60%)] px-5 pb-6 pt-12 lg:px-8">
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-[linear-gradient(180deg,rgba(251,251,248,0),rgba(251,251,248,0.92)_18%,rgba(251,251,248,1)_60%)] px-5 pb-6 pt-12 lg:px-8">
               <div className="pointer-events-auto mx-auto max-w-4xl">
                 {combinedError ? <p className="mb-3 text-sm text-red-600">{combinedError}</p> : null}
                 <Composer

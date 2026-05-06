@@ -18,7 +18,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { ChevronsUpDownIcon, SparklesIcon, BadgeCheckIcon, CreditCardIcon, BellIcon, LogOutIcon } from "lucide-react"
+import { ChevronsUpDownIcon, SparklesIcon, BadgeCheckIcon, CreditCardIcon, BellIcon, LogInIcon, LogOutIcon } from "lucide-react"
 
 function getInitials(name: string, email: string) {
   const value = name.trim() || email.trim()
@@ -51,8 +51,20 @@ function UserAvatar({ user }: { user: { name: string; email: string; avatar?: st
   )
 }
 
+function LoginAvatar() {
+  return (
+    <Avatar>
+      <AvatarFallback className="bg-primary text-primary-foreground">
+        <LogInIcon className="size-4" />
+      </AvatarFallback>
+    </Avatar>
+  )
+}
+
 export function NavUser({
   user,
+  isLoggedIn = true,
+  onLogin,
   onLogout,
 }: {
   user: {
@@ -60,9 +72,27 @@ export function NavUser({
     email: string
     avatar?: string | null
   }
+  isLoggedIn?: boolean
+  onLogin?: () => void
   onLogout?: () => void
 }) {
   const { isMobile } = useSidebar()
+
+  if (!isLoggedIn) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton size="lg" onClick={onLogin}>
+            <LoginAvatar />
+            <div className="grid flex-1 text-left text-sm leading-tight">
+              <span className="truncate font-medium">{user.name}</span>
+            </div>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    )
+  }
+
   return (
     <SidebarMenu>
       <SidebarMenuItem>
