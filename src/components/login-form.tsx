@@ -52,9 +52,11 @@ export function LoginForm({
   const [isSendingOtp, setIsSendingOtp] = useState(false)
   const [isOtpSubmitting, setIsOtpSubmitting] = useState(false)
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null)
+  const [isOtpLoginMode, setIsOtpLoginMode] = useState(false)
 
   const isRegister = mode === "register"
   const isVerifyingRegistration = isRegister && Boolean(pendingVerificationEmail)
+  const showOtpLogin = !isRegister && isOtpLoginMode
   const isBusy = isSubmitting || isSendingOtp || isOtpSubmitting || Boolean(socialProvider)
 
   function resetMessages() {
@@ -68,6 +70,20 @@ export function LoginForm({
     setConfirmPassword("")
     setOtp("")
     setPendingVerificationEmail(null)
+    setIsOtpLoginMode(false)
+    resetMessages()
+  }
+
+  function switchToOtpLoginMode() {
+    setPassword("")
+    setOtp("")
+    setIsOtpLoginMode(true)
+    resetMessages()
+  }
+
+  function switchToPasswordLoginMode() {
+    setOtp("")
+    setIsOtpLoginMode(false)
     resetMessages()
   }
 
@@ -174,6 +190,8 @@ export function LoginForm({
               ? "输入邮箱验证码完成注册"
               : isRegister
               ? "使用邮箱创建账号"
+              : showOtpLogin
+              ? "使用邮箱验证码登录"
               : "使用邮箱和密码登录"}
           </CardDescription>
         </CardHeader>
@@ -217,7 +235,7 @@ export function LoginForm({
                   required
                 />
               </Field>
-              {!isRegister ? (
+              {showOtpLogin ? (
                 <Field>
                   <FieldLabel htmlFor="email-otp">邮箱验证码</FieldLabel>
                   <div className="flex gap-2">
@@ -248,30 +266,42 @@ export function LoginForm({
                   >
                     {isOtpSubmitting ? "登录中..." : "验证码登录"}
                   </Button>
-                </Field>
-              ) : null}
-              <Field>
-                <div className="flex items-center">
-                  <FieldLabel htmlFor="password">密码</FieldLabel>
-                  {!isRegister ? (
+                  <FieldDescription className="text-center">
                     <button
                       type="button"
-                      className="ml-auto text-sm text-muted-foreground underline-offset-4 hover:underline"
+                      className="underline underline-offset-4 hover:text-primary"
                       disabled={isBusy}
-                      onClick={() => setSuccessMessage("请联系管理员重置密码")}
+                      onClick={switchToPasswordLoginMode}
                     >
-                      忘记密码？
+                      返回密码登录
                     </button>
-                  ) : null}
-                </div>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  required
-                />
-              </Field>
+                  </FieldDescription>
+                </Field>
+              ) : null}
+              {!showOtpLogin ? (
+                <Field>
+                  <div className="flex items-center">
+                    <FieldLabel htmlFor="password">密码</FieldLabel>
+                    {!isRegister ? (
+                      <button
+                        type="button"
+                        className="ml-auto text-sm text-muted-foreground underline-offset-4 hover:underline"
+                        disabled={isBusy}
+                        onClick={switchToOtpLoginMode}
+                      >
+                        忘记密码？
+                      </button>
+                    ) : null}
+                  </div>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    required={!showOtpLogin}
+                  />
+                </Field>
+              ) : null}
               {isRegister ? (
                 <Field>
                   <FieldLabel htmlFor="confirm-password">确认密码</FieldLabel>
@@ -314,7 +344,7 @@ export function LoginForm({
                 </FieldDescription>
               ) : null}
               <Field>
-                <Button type="submit" disabled={isBusy || isVerifyingRegistration}>
+                <Button type="submit" disabled={isBusy || isVerifyingRegistration || showOtpLogin}>
                   {isSubmitting ? "处理中..." : isRegister ? "注册" : "登录"}
                 </Button>
                 <FieldDescription className="text-center">
