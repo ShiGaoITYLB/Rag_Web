@@ -7,6 +7,7 @@ import {
   createQueryHook,
 } from "swr-openapi"
 
+import { API_BASE_URL, buildApiUrl } from "@/lib/api-config"
 import { getJwtToken } from "@/lib/auth"
 import type { components, paths } from "./schema"
 
@@ -18,15 +19,7 @@ export type SessionDetail = components["schemas"]["SessionDetail"]
 export type CreateSessionPayload = components["schemas"]["CreateSessionPayload"]
 export type SessionDeleteResponse = components["schemas"]["SessionDeleteResponse"]
 
-export const API_BASE_URL =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? ""
-
-export function buildApiUrl(path: string) {
-  if (!API_BASE_URL) {
-    return path
-  }
-  return `${API_BASE_URL}${path}`
-}
+export { API_BASE_URL, buildApiUrl }
 
 function hasOwn(value: object, key: string) {
   return Object.prototype.hasOwnProperty.call(value, key)

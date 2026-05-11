@@ -1,4 +1,5 @@
 import { authClient } from "@/lib/auth-client"
+import { buildApiUrl } from "@/lib/api-config"
 
 export type AuthUser = {
   id?: string
@@ -127,7 +128,7 @@ export async function getJwtToken(options?: { forceRefresh?: boolean }) {
     return cachedToken
   }
 
-  const response = await fetch("/api/auth/token", {
+  const response = await fetch(buildApiUrl("/api/auth/token"), {
     method: "GET",
     credentials: "include",
     headers: {
