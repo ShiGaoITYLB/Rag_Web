@@ -15,10 +15,14 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-          "/api/auth": {
-      target: "http://127.0.0.1:3005",
-      changeOrigin: false
-    },
+      "/api/auth": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+      "/api/me": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
       "/ask": {
         target: "http://127.0.0.1:8000",
         changeOrigin: true,
